@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/runtime/protoiface"
+	"strings"
 )
 
 // UnmarshalOptions configures the unmarshaler.
@@ -54,6 +55,28 @@ type UnmarshalOptions struct {
 func Unmarshal(b []byte, m Message) error {
 	_, err := UnmarshalOptions{RecursionLimit: protowire.DefaultRecursionLimit}.unmarshal(b, m.ProtoReflect())
 	return err
+}
+
+func (o UnmarshalOptions) UnmarshalFlatMap(data map[string]any, m Message) error {
+	protoReflect := m.ProtoReflect()
+	messageDesc := protoReflect.Descriptor()
+	fieldDescs := messageDesc.Fields()
+
+	for key, value := range data {
+		lowerKey := strings.ToLower(key)
+		// The name can either be the JSON name or the proto field name.
+		fd := fieldDescs.ByJSONName(lowerKey)
+		if fd == nil {
+			fd = fieldDescs.ByTextName(lowerKey)
+		}
+		if fd == nil {
+			return errors.New("unknown field %v", key)
+		}
+
+		protoReflect.Set(fd, protoreflect.ValueOf(value))
+
+	}
+	return nil
 }
 
 // Unmarshal parses the wire-format message in b and places the result in m.
